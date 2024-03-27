@@ -73,6 +73,13 @@ TEST_CASES = [
     ("Conv2d 2 LoRA", "Conv2d", LoraConfig, {"target_modules": ["conv2d", "lin0"]}),
     ("Conv2d 1 LoRA with DoRA", "Conv2d", LoraConfig, {"target_modules": ["conv2d"], "use_dora": True}),
     ("Conv2d 2 LoRA with DoRA", "Conv2d", LoraConfig, {"target_modules": ["conv2d", "lin0"], "use_dora": True}),
+    ("Conv2dZeroInit 1 LoRA", "Conv2dZeroInit", LoraConfig, {"target_modules": ["conv2d", "lin0"]}),
+    (
+        "Conv2dZeroInit 1 LoRA with DoRA",
+        "Conv2dZeroInit",
+        LoraConfig,
+        {"target_modules": ["conv2d", "lin0"], "use_dora": True},
+    ),
     #######
     # IA³ #
     #######
@@ -417,6 +424,34 @@ class ModelConv2D(nn.Module):
         return X
 
 
+class ModelConv2DZeroInit(nn.Module):
+    """A test model containing a Conv2D and Linear layer with entire weight channels/columns initialized to zero. This
+    model was added in response to a divide-by-zero bug that resulted in NaN outputs for some LoRA configurations.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.conv2d = nn.Conv2d(5, 10, 3)
+        self.relu = nn.ReLU()
+        self.flat = nn.Flatten()
+        self.lin0 = nn.Linear(10, 2)
+        self.sm = nn.LogSoftmax(dim=-1)
+
+        # Initialize some weights of the Conv2D and Linear layers to zero.
+        with torch.no_grad():
+            self.lin0.weight[0, :] = 0.0
+            self.conv2d.weight[0, ...] = 0.0
+
+    def forward(self, X):
+        X = X.float().reshape(-1, 5, 3, 3)
+        X = self.conv2d(X)
+        X = self.relu(X)
+        X = self.flat(X)
+        X = self.lin0(X)
+        X = self.sm(X)
+        return X
+
+
 class MockTransformerWrapper:
     """Mock class to behave like a transformers model.
 
@@ -440,6 +475,9 @@ class MockTransformerWrapper:
 
         if model_id == "Conv2d":
             return ModelConv2D().to(torch_dtype)
+
+        if model_id == "Conv2dZeroInit":
+            return ModelConv2DZeroInit().to(torch_dtype)
 
         raise ValueError(f"model_id {model_id} not implemented")
 
