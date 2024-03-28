@@ -214,6 +214,7 @@ class LoraLayer(BaseTunerLayer):
         weight = dequantize_bnb_weight(weight, state=quant_state)  # no-op if not bnb
         weight = weight.to(x.dtype)
         weight_norm = self._get_weight_norm(weight, lora_weight, scaling)
+        weight_norm = torch.clamp(weight_norm, min=torch.finfo(weight.dtype).eps)
         # see section 4.3 of DoRA (https://arxiv.org/abs/2402.09353)
         # "[...] we suggest treating ||V +∆V ||_c in
         # Eq. (5) as a constant, thereby detaching it from the gradient
@@ -963,6 +964,7 @@ class Conv2d(nn.Module, LoraLayer):
         lora_weight = lora_weight.reshape(weight.shape)
         magnitude = self.lora_magnitude_vector[active_adapter]
         weight_norm = self._get_weight_norm(weight, lora_weight, scaling)
+        weight_norm = torch.clamp(weight_norm, min=torch.finfo(weight.dtype).eps)
         # see section 4.3 of DoRA (https://arxiv.org/abs/2402.09353)
         # "[...] we suggest treating ||V +∆V ||_c in
         # Eq. (5) as a constant, thereby detaching it from the gradient
